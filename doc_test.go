@@ -88,32 +88,34 @@ func Example_c() {
 		{1,1}, {2,2}, {3,3}, {4,4}, {5,5},
 	}
 
-	// Stream output as it happens:
 	output := make(chan image.Point)
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go func(){
-		defer wg.Done()
-		for point := range output {
-			fmt.Println(point.String())
-		}
-	}()
 
-	// Our job just sends output to our channel:
+	// This job sends output to our channel, instead of
+	// modifying data in-place as in the previous example:
 	scale2 := func(p image.Point) func() {
 		return func() {
 			output <- p.Mul(2)
 		}
 	}
 
-	Run(2, func(queue WorkQueue) {
-		for _, item := range items {
-			queue.Submit(scale2(item))
-		}
-	})
+	// Submitting work to the queue may block, so we do it in
+	// a goroutine:
+	go func() { 
+		Run(2, func(queue WorkQueue) {
+			for _, item := range items {
+				queue.Submit(scale2(item))
+			}	
+		})
 
-	close(output)
-	wg.Wait()
+		// ... but once Run() finishes, all work has completed
+		// so we can close the channel. No WaitGroup needed:
+		close(output)
+	}()
+
+	// Print output as it happens:
+	for point := range output {
+		fmt.Println(point.String())
+	}
 
 	// Unordered output:
 	// (2,2)
